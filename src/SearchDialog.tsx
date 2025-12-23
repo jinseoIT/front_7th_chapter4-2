@@ -145,29 +145,36 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
     return filteredLectures.slice(0, page * PAGE_SIZE);
   }, [filteredLectures, page]);
 
+  const sortedTimes = useMemo(() => {
+    return [...searchOptions.times].sort((a, b) => a - b);
+  }, [searchOptions.times]);
+
   const changeSearchOption = useCallback((field: keyof SearchOption, value: SearchOption[typeof field]) => {
     setPage(1);
     setSearchOptions((prev) => ({ ...prev, [field]: value }));
     loaderWrapperRef.current?.scrollTo(0, 0);
   }, []);
 
-  const addSchedule = useCallback((lecture: Lecture) => {
-    if (!searchInfo) return;
+  const addSchedule = useCallback(
+    (lecture: Lecture) => {
+      if (!searchInfo) return;
 
-    const { tableId } = searchInfo;
+      const { tableId } = searchInfo;
 
-    const schedules = parseSchedule(lecture.schedule).map((schedule) => ({
-      ...schedule,
-      lecture,
-    }));
+      const schedules = parseSchedule(lecture.schedule).map((schedule) => ({
+        ...schedule,
+        lecture,
+      }));
 
-    setSchedulesMap((prev) => ({
-      ...prev,
-      [tableId]: [...prev[tableId], ...schedules],
-    }));
+      setSchedulesMap((prev) => ({
+        ...prev,
+        [tableId]: [...prev[tableId], ...schedules],
+      }));
 
-    onClose();
-  }, [searchInfo, setSchedulesMap, onClose]);
+      onClose();
+    },
+    [searchInfo, setSchedulesMap, onClose]
+  );
 
   useEffect(() => {
     const start = performance.now();
@@ -283,21 +290,19 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
                   onChange={(values) => changeSearchOption("times", values.map(Number))}
                 >
                   <Wrap spacing={1} mb={2}>
-                    {searchOptions.times
-                      .sort((a, b) => a - b)
-                      .map((time) => (
-                        <Tag key={time} size="sm" variant="outline" colorScheme="blue">
-                          <TagLabel>{time}교시</TagLabel>
-                          <TagCloseButton
-                            onClick={() =>
-                              changeSearchOption(
-                                "times",
-                                searchOptions.times.filter((v) => v !== time)
-                              )
-                            }
-                          />
-                        </Tag>
-                      ))}
+                    {sortedTimes.map((time) => (
+                      <Tag key={time} size="sm" variant="outline" colorScheme="blue">
+                        <TagLabel>{time}교시</TagLabel>
+                        <TagCloseButton
+                          onClick={() =>
+                            changeSearchOption(
+                              "times",
+                              searchOptions.times.filter((v) => v !== time)
+                            )
+                          }
+                        />
+                      </Tag>
+                    ))}
                   </Wrap>
                   <Stack
                     spacing={2}
