@@ -31,11 +31,10 @@ import {
 import { LectureRow } from "./LectureRow.tsx";
 
 interface Props {
-  searchInfo: {
-    tableId: string;
-    day?: string;
-    time?: number;
-  } | null;
+  isOpen: boolean;
+  initialTableId: string;
+  initialDay?: string;
+  initialTime?: number;
   onClose: () => void;
 }
 
@@ -61,8 +60,11 @@ const fetchAllLectures = async () =>
   ]);
 
 // TODO: 이 컴포넌트에서 불필요한 연산이 발생하지 않도록 다양한 방식으로 시도해주세요.
-const SearchDialog = ({ searchInfo, onClose }: Props) => {
+const SearchDialog = ({ isOpen, initialTableId, initialDay, initialTime, onClose }: Props) => {
   const { setSchedulesMap } = useScheduleContext();
+
+  // searchInfo를 내부 state로 관리
+  const [currentTableId, setCurrentTableId] = useState(initialTableId);
 
   const loaderWrapperRef = useRef<HTMLDivElement>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
@@ -168,9 +170,7 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
 
   const addSchedule = useCallback(
     (lecture: Lecture) => {
-      if (!searchInfo) return;
-
-      const { tableId } = searchInfo;
+      if (!currentTableId) return;
 
       const schedules = parseSchedule(lecture.schedule).map((schedule) => ({
         ...schedule,
@@ -179,12 +179,12 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
 
       setSchedulesMap((prev) => ({
         ...prev,
-        [tableId]: [...prev[tableId], ...schedules],
+        [currentTableId]: [...prev[currentTableId], ...schedules],
       }));
 
       onClose();
     },
-    [searchInfo, setSchedulesMap, onClose]
+    [currentTableId, setSchedulesMap, onClose]
   );
 
   useEffect(() => {
@@ -221,16 +221,19 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
   }, [lastPage]);
 
   useEffect(() => {
-    setSearchOptions((prev) => ({
-      ...prev,
-      days: searchInfo?.day ? [searchInfo.day] : [],
-      times: searchInfo?.time ? [searchInfo.time] : [],
-    }));
-    setPage(1);
-  }, [searchInfo]);
+    if (isOpen) {
+      setCurrentTableId(initialTableId);
+      setSearchOptions((prev) => ({
+        ...prev,
+        days: initialDay ? [initialDay] : [],
+        times: initialTime ? [initialTime] : [],
+      }));
+      setPage(1);
+    }
+  }, [isOpen, initialTableId, initialDay, initialTime]);
 
   return (
-    <Modal isOpen={Boolean(searchInfo)} onClose={onClose} size="6xl">
+    <Modal isOpen={isOpen} onClose={onClose} size="6xl">
       <ModalOverlay />
       <ModalContent maxW="90vw" w="1000px">
         <ModalHeader>수업 검색</ModalHeader>

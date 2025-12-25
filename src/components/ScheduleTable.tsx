@@ -17,7 +17,7 @@ import { Schedule } from "../types";
 import { fill2, parseHnM } from "../utils";
 import { useDndContext, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { ComponentProps, Fragment } from "react";
+import { ComponentProps, Fragment, memo } from "react";
 
 interface Props {
   tableId: string;
@@ -174,4 +174,4 @@ const DraggableSchedule = ({
   );
 };
 
-export default ScheduleTable;
+export default memo(ScheduleTable);
