@@ -5,37 +5,70 @@ import SearchDialog from "./SearchDialog.tsx";
 import { useState, useCallback, memo } from "react";
 import { Schedule } from "../types";
 
-// ScheduleTable을 감싸는 메모이제이션된 컴포넌트
-const MemoizedScheduleTableItem = memo(({
+// 전체 테이블 카드(헤더 + 버튼 + ScheduleTable)를 메모이제이션
+const ScheduleTableCard = memo(({
   tableId,
   schedules,
+  index,
+  isOnlyOne,
   onScheduleTimeClick,
-  onDeleteButtonClick
+  onDeleteSchedule,
+  onOpenDialog,
+  onDuplicate,
+  onRemove,
 }: {
   tableId: string;
   schedules: Schedule[];
+  index: number;
+  isOnlyOne: boolean;
   onScheduleTimeClick: (tableId: string, day: string, time: number) => void;
-  onDeleteButtonClick: (tableId: string, day: string, time: number) => void;
+  onDeleteSchedule: (tableId: string, day: string, time: number) => void;
+  onOpenDialog: (tableId: string) => void;
+  onDuplicate: (tableId: string) => void;
+  onRemove: (tableId: string) => void;
 }) => {
+  // 각 테이블별 콜백 메모이제이션
   const handleScheduleTimeClick = useCallback((timeInfo: { day: string; time: number }) => {
     onScheduleTimeClick(tableId, timeInfo.day, timeInfo.time);
   }, [tableId, onScheduleTimeClick]);
 
   const handleDeleteButtonClick = useCallback((timeInfo: { day: string; time: number }) => {
-    onDeleteButtonClick(tableId, timeInfo.day, timeInfo.time);
-  }, [tableId, onDeleteButtonClick]);
+    onDeleteSchedule(tableId, timeInfo.day, timeInfo.time);
+  }, [tableId, onDeleteSchedule]);
+
+  const handleOpenDialog = useCallback(() => {
+    onOpenDialog(tableId);
+  }, [tableId, onOpenDialog]);
+
+  const handleDuplicate = useCallback(() => {
+    onDuplicate(tableId);
+  }, [tableId, onDuplicate]);
+
+  const handleRemove = useCallback(() => {
+    onRemove(tableId);
+  }, [tableId, onRemove]);
 
   return (
-    <ScheduleTable
-      schedules={schedules}
-      tableId={tableId}
-      onScheduleTimeClick={handleScheduleTimeClick}
-      onDeleteButtonClick={handleDeleteButtonClick}
-    />
+    <Stack width="600px">
+      <Flex justifyContent="space-between" alignItems="center">
+        <Heading as="h3" fontSize="lg">시간표 {index + 1}</Heading>
+        <ButtonGroup size="sm" isAttached>
+          <Button colorScheme="green" onClick={handleOpenDialog}>시간표 추가</Button>
+          <Button colorScheme="green" mx="1px" onClick={handleDuplicate}>복제</Button>
+          <Button colorScheme="green" isDisabled={isOnlyOne} onClick={handleRemove}>삭제</Button>
+        </ButtonGroup>
+      </Flex>
+      <ScheduleTable
+        schedules={schedules}
+        tableId={tableId}
+        onScheduleTimeClick={handleScheduleTimeClick}
+        onDeleteButtonClick={handleDeleteButtonClick}
+      />
+    </Stack>
   );
 });
 
-MemoizedScheduleTableItem.displayName = 'MemoizedScheduleTableItem';
+ScheduleTableCard.displayName = 'ScheduleTableCard';
 
 export const ScheduleTables = () => {
   const schedulesMap = useSchedulesMap();
@@ -84,23 +117,18 @@ export const ScheduleTables = () => {
     <>
       <Flex w="full" gap={6} p={6} flexWrap="wrap">
         {Object.entries(schedulesMap).map(([tableId, schedules], index) => (
-          <Stack key={tableId} width="600px">
-            <Flex justifyContent="space-between" alignItems="center">
-              <Heading as="h3" fontSize="lg">시간표 {index + 1}</Heading>
-              <ButtonGroup size="sm" isAttached>
-                <Button colorScheme="green" onClick={() => openDialogForTable(tableId)}>시간표 추가</Button>
-                <Button colorScheme="green" mx="1px" onClick={() => duplicate(tableId)}>복제</Button>
-                <Button colorScheme="green" isDisabled={disabledRemoveButton}
-                        onClick={() => remove(tableId)}>삭제</Button>
-              </ButtonGroup>
-            </Flex>
-            <MemoizedScheduleTableItem
-              tableId={tableId}
-              schedules={schedules}
-              onScheduleTimeClick={handleScheduleTimeClick}
-              onDeleteButtonClick={handleDeleteSchedule}
-            />
-          </Stack>
+          <ScheduleTableCard
+            key={tableId}
+            tableId={tableId}
+            schedules={schedules}
+            index={index}
+            isOnlyOne={disabledRemoveButton}
+            onScheduleTimeClick={handleScheduleTimeClick}
+            onDeleteSchedule={handleDeleteSchedule}
+            onOpenDialog={openDialogForTable}
+            onDuplicate={duplicate}
+            onRemove={remove}
+          />
         ))}
       </Flex>
       <SearchDialog
