@@ -15,46 +15,64 @@ import {
 import { CellSize, DAY_LABELS, 분 } from "../constants";
 import { Schedule } from "../types";
 import { fill2, parseHnM } from "../utils";
-import { useDndContext, useDraggable } from "@dnd-kit/core";
+import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { ComponentProps, Fragment, memo, useCallback, useMemo } from "react";
+import { ComponentProps, Fragment, memo, useCallback, useMemo, MouseEvent } from "react";
 
-// DnD context를 구독하여 active 상태만 체크하는 outline 레이어
-const DndActiveOutline = memo(({ tableId }: { tableId: string }) => {
-  const dndContext = useDndContext();
+// 상수: 야간 수업 시작 인덱스
+const NIGHT_CLASS_START_INDEX = 17;
 
-  const isActive = useMemo(() => {
-    const activeId = dndContext.active?.id;
-    if (!activeId) return false;
-    const activeTableId = String(activeId).split(":")[0];
-    return activeTableId === tableId;
-  }, [dndContext.active?.id, tableId]);
-
-  if (!isActive) return null;
+// 각 셀을 메모이제이션 (primitive props만 사용)
+const TimeCell = memo(({ day, timeIndex }: { day: string; timeIndex: number }) => {
+  const isNightClass = timeIndex > NIGHT_CLASS_START_INDEX;
 
   return (
-    <Box
-      position="absolute"
-      top={0}
-      left={0}
-      right={0}
-      bottom={0}
-      outline="5px dashed"
-      outlineColor="blue.300"
-      pointerEvents="none"
-      zIndex={1}
+    <GridItem
+      borderWidth="1px 0 0 1px"
+      borderColor="gray.300"
+      bg={isNightClass ? "gray.100" : "white"}
+      cursor="pointer"
+      _hover={{ bg: "yellow.100" }}
+      data-day={day}
+      data-time={timeIndex + 1}
     />
   );
 });
 
-DndActiveOutline.displayName = 'DndActiveOutline';
+TimeCell.displayName = 'TimeCell';
 
-// 테이블 Grid를 메모이제이션
-const MemoizedTableGrid = memo(({
-  onScheduleTimeClick
-}: {
-  onScheduleTimeClick?: (timeInfo: { day: string; time: number }) => void;
-}) => {
+// 정적 헤더 셀
+const HeaderCell = memo(({ label }: { label: string }) => {
+  return (
+    <GridItem borderLeft="1px" borderColor="gray.300" bg="gray.100">
+      <Flex justifyContent="center" alignItems="center" h="full">
+        <Text fontWeight="bold">{label}</Text>
+      </Flex>
+    </GridItem>
+  );
+});
+
+HeaderCell.displayName = 'HeaderCell';
+
+// 정적 시간 라벨 셀
+const TimeLabel = memo(({ time, timeIndex }: { time: string; timeIndex: number }) => {
+  const isNightClass = timeIndex > NIGHT_CLASS_START_INDEX;
+
+  return (
+    <GridItem borderTop="1px solid" borderColor="gray.300" bg={isNightClass ? "gray.200" : "gray.100"}>
+      <Flex justifyContent="center" alignItems="center" h="full">
+        <Text fontSize="xs">
+          {fill2(timeIndex + 1)} ({time})
+        </Text>
+      </Flex>
+    </GridItem>
+  );
+});
+
+TimeLabel.displayName = 'TimeLabel';
+
+// 완전히 정적인 테이블 Grid (props 없음, 리렌더링 없음)
+const StaticTableGrid = memo(() => {
   return (
     <Grid
       templateColumns={`120px repeat(${DAY_LABELS.length}, ${CellSize.WIDTH}px)`}
@@ -71,31 +89,13 @@ const MemoizedTableGrid = memo(({
         </Flex>
       </GridItem>
       {DAY_LABELS.map((day) => (
-        <GridItem key={day} borderLeft="1px" borderColor="gray.300" bg="gray.100">
-          <Flex justifyContent="center" alignItems="center" h="full">
-            <Text fontWeight="bold">{day}</Text>
-          </Flex>
-        </GridItem>
+        <HeaderCell key={day} label={day} />
       ))}
       {TIMES.map((time, timeIndex) => (
         <Fragment key={`시간-${timeIndex + 1}`}>
-          <GridItem borderTop="1px solid" borderColor="gray.300" bg={timeIndex > 17 ? "gray.200" : "gray.100"}>
-            <Flex justifyContent="center" alignItems="center" h="full">
-              <Text fontSize="xs">
-                {fill2(timeIndex + 1)} ({time})
-              </Text>
-            </Flex>
-          </GridItem>
+          <TimeLabel time={time} timeIndex={timeIndex} />
           {DAY_LABELS.map((day) => (
-            <GridItem
-              key={`${day}-${timeIndex + 2}`}
-              borderWidth="1px 0 0 1px"
-              borderColor="gray.300"
-              bg={timeIndex > 17 ? "gray.100" : "white"}
-              cursor="pointer"
-              _hover={{ bg: "yellow.100" }}
-              onClick={() => onScheduleTimeClick?.({ day, time: timeIndex + 1 })}
-            />
+            <TimeCell key={`${day}-${timeIndex}`} day={day} timeIndex={timeIndex} />
           ))}
         </Fragment>
       ))}
@@ -103,7 +103,7 @@ const MemoizedTableGrid = memo(({
   );
 });
 
-MemoizedTableGrid.displayName = 'MemoizedTableGrid';
+StaticTableGrid.displayName = 'StaticTableGrid';
 
 // DraggableSchedule를 감싸는 메모이제이션된 래퍼
 const MemoizedDraggableSchedule = memo(({
@@ -126,13 +126,24 @@ const MemoizedDraggableSchedule = memo(({
     });
   }, [schedule.day, schedule.range, onDeleteButtonClick]);
 
+  const bgColor = useMemo(() => getColor(schedule.lecture.id), [getColor, schedule.lecture.id]);
+
   return (
     <DraggableSchedule
       id={`${tableId}:${index}`}
       data={schedule}
-      bg={getColor(schedule.lecture.id)}
+      bg={bgColor}
       onDeleteButtonClick={handleDelete}
     />
+  );
+}, (prev, next) => {
+  // 커스텀 비교: 불필요한 리렌더링 방지
+  return (
+    prev.tableId === next.tableId &&
+    prev.index === next.index &&
+    prev.schedule === next.schedule &&
+    prev.getColor === next.getColor &&
+    prev.onDeleteButtonClick === next.onDeleteButtonClick
   );
 });
 
@@ -157,29 +168,55 @@ const TIMES = [
     .map((v) => `${parseHnM(v)}~${parseHnM(v + 50 * 분)}`),
 ] as const;
 
+// 강의별 색상 팔레트
+const LECTURE_COLORS = ["#fdd", "#ffd", "#dff", "#ddf", "#fdf", "#dfd"] as const;
+
 const ScheduleTable = ({ tableId, schedules, onScheduleTimeClick, onDeleteButtonClick }: Props) => {
-  // 강의 ID 목록을 문자열로 메모이제이션 (배열 참조가 아닌 내용 기반 비교)
+  console.log(`🟢 ScheduleTable ${tableId} 렌더링`);
+
+  // 강의 ID를 정렬된 문자열로 메모이제이션 (내용 기반 비교)
   const lectureIdsKey = useMemo(() => {
-    return [...new Set(schedules.map(({ lecture }) => lecture.id))].sort().join(',');
+    const uniqueIds = new Set(schedules.map(({ lecture }) => lecture.id));
+    return Array.from(uniqueIds).sort().join(',');
   }, [schedules]);
 
-  // lectureIdsKey가 변경될 때만 getColor 함수 재생성
+  // 강의 ID -> 색상 매핑 함수 (lectureIdsKey 변경 시만 재생성)
   const getColor = useMemo(() => {
-    const lectures = lectureIdsKey.split(',').filter(id => id);
-    const colors = ["#fdd", "#ffd", "#dff", "#ddf", "#fdf", "#dfd"];
+    const lectureIds = lectureIdsKey ? lectureIdsKey.split(',') : [];
+
     return (lectureId: string): string => {
-      return colors[lectures.indexOf(lectureId) % colors.length];
+      const index = lectureIds.indexOf(lectureId);
+      return index === -1
+        ? LECTURE_COLORS[0]
+        : LECTURE_COLORS[index % LECTURE_COLORS.length];
     };
   }, [lectureIdsKey]);
 
+  // 이벤트 위임: 120개 셀의 개별 핸들러 대신 1개 핸들러
+  const handleGridClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const gridItem = target.closest('[data-day]');
+
+    if (!gridItem) return;
+
+    const day = gridItem.getAttribute('data-day');
+    const timeStr = gridItem.getAttribute('data-time');
+
+    if (day && timeStr) {
+      const time = Number(timeStr);
+      if (!isNaN(time)) {
+        onScheduleTimeClick?.({ day, time });
+      }
+    }
+  }, [onScheduleTimeClick]);
+
   return (
-    <Box position="relative">
-      <DndActiveOutline tableId={tableId} />
-      <MemoizedTableGrid onScheduleTimeClick={onScheduleTimeClick} />
+    <Box position="relative" onClick={handleGridClick}>
+      <StaticTableGrid />
 
       {schedules.map((schedule, index) => (
         <MemoizedDraggableSchedule
-          key={`${schedule.lecture.title}-${index}`}
+          key={`${tableId}:${schedule.lecture.id}:${index}`}
           tableId={tableId}
           index={index}
           schedule={schedule}

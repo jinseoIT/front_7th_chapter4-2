@@ -1,7 +1,14 @@
-import { DndContext, Modifier, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragEndEvent, Modifier, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { PropsWithChildren, useCallback } from "react";
 import { CellSize, DAY_LABELS } from "../constants";
 import { useSetSchedulesMap } from "./ScheduleContext.tsx";
+
+// 상수 정의: 매직 넘버 제거
+const HEADER_OFFSET = {
+  LEFT: 120,
+  TOP: 40,
+  BORDER: 1,
+} as const;
 
 function createSnapModifier(): Modifier {
   return ({ transform, containerNodeRect, draggingNodeRect }) => {
@@ -12,8 +19,8 @@ function createSnapModifier(): Modifier {
 
     const { top = 0, left = 0, bottom = 0, right = 0 } = draggingNodeRect ?? {};
 
-    const minX = containerLeft - left + 120 + 1;
-    const minY = containerTop - top + 40 + 1;
+    const minX = containerLeft - left + HEADER_OFFSET.LEFT + HEADER_OFFSET.BORDER;
+    const minY = containerTop - top + HEADER_OFFSET.TOP + HEADER_OFFSET.BORDER;
     const maxX = containerRight - right;
     const maxY = containerBottom - bottom;
 
@@ -27,7 +34,14 @@ function createSnapModifier(): Modifier {
 
 const modifiers = [createSnapModifier()];
 
-export default function ScheduleDndProvider({ children }: PropsWithChildren) {
+interface Props extends PropsWithChildren {
+  tableId: string;
+}
+
+// 핵심: 각 테이블마다 독립적인 DndProvider!
+export default function ScheduleDndProvider({ children, tableId }: Props) {
+  console.log(`🔵 ScheduleDndProvider ${tableId} 렌더링`);
+
   const setSchedulesMap = useSetSchedulesMap();
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -37,39 +51,80 @@ export default function ScheduleDndProvider({ children }: PropsWithChildren) {
     })
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleDragEnd = useCallback((event: any) => {
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, delta } = event;
     const { x, y } = delta;
-    const [tableId, index] = active.id.split(":");
+
+    // Early return: delta가 0이면 상태 업데이트 스킵
+    if (x === 0 && y === 0) return;
+
+    // ID 파싱 (tableId는 이미 prop으로 받음)
+    const [, indexStr] = String(active.id).split(":");
+    const scheduleIndex = Number(indexStr);
+
+    // 잘못된 ID 형식 방어
+    if (isNaN(scheduleIndex)) {
+      console.warn('Invalid drag item ID format:', active.id);
+      return;
+    }
 
     setSchedulesMap((prevSchedulesMap) => {
-      const schedule = prevSchedulesMap[tableId][index];
-      const nowDayIndex = DAY_LABELS.indexOf(schedule.day as (typeof DAY_LABELS)[number]);
-      const moveDayIndex = Math.floor(x / 80);
-      const moveTimeIndex = Math.floor(y / 30);
+      // 대상 스케줄 존재 확인
+      const targetSchedules = prevSchedulesMap[tableId];
+      if (!targetSchedules || !targetSchedules[scheduleIndex]) {
+        console.warn('Target schedule not found:', { tableId, scheduleIndex });
+        return prevSchedulesMap;
+      }
 
-      // 변경된 테이블의 스케줄 배열만 새로 생성
-      const updatedSchedules = prevSchedulesMap[tableId].map((targetSchedule, targetIndex) => {
-        // 변경되지 않은 항목은 원본 객체를 그대로 반환 (새 객체 생성 방지)
-        if (targetIndex !== Number(index)) {
-          return targetSchedule;
-        }
-        // 변경된 항목만 새 객체 생성
-        return {
-          ...targetSchedule,
-          day: DAY_LABELS[nowDayIndex + moveDayIndex],
-          range: targetSchedule.range.map((time) => time + moveTimeIndex),
-        };
-      });
+      const targetSchedule = targetSchedules[scheduleIndex];
 
-      // 변경된 테이블만 새로 할당, 나머지 테이블은 원본 유지
+      // 현재 위치 계산
+      const currentDayIndex = DAY_LABELS.indexOf(targetSchedule.day as (typeof DAY_LABELS)[number]);
+      if (currentDayIndex === -1) {
+        console.warn('Invalid day value:', targetSchedule.day);
+        return prevSchedulesMap;
+      }
+
+      // 이동 거리 계산 (픽셀 -> 셀 단위)
+      const moveDayIndex = Math.floor(x / CellSize.WIDTH);
+      const moveTimeIndex = Math.floor(y / CellSize.HEIGHT);
+
+      // 실제 변경 체크: 셀 이동이 없으면 원본 반환
+      if (moveDayIndex === 0 && moveTimeIndex === 0) {
+        return prevSchedulesMap; // 리렌더링 완전 방지
+      }
+
+      // 새 위치 계산 및 범위 검증
+      const newDayIndex = currentDayIndex + moveDayIndex;
+      if (newDayIndex < 0 || newDayIndex >= DAY_LABELS.length) {
+        console.warn('Out of bounds: day index', newDayIndex);
+        return prevSchedulesMap;
+      }
+
+      const newDay = DAY_LABELS[newDayIndex];
+      const newRange = targetSchedule.range.map((time) => time + moveTimeIndex);
+
+      // 시간 범위 유효성 검증 (선택적)
+      const isValidTimeRange = newRange.every((time) => time >= 1 && time <= 24);
+      if (!isValidTimeRange) {
+        console.warn('Invalid time range:', newRange);
+        return prevSchedulesMap;
+      }
+
+      // Immutable update: 변경된 스케줄만 새 객체 생성
+      const updatedSchedules = targetSchedules.map((schedule, idx) =>
+        idx === scheduleIndex
+          ? { ...schedule, day: newDay, range: newRange }
+          : schedule // 원본 참조 유지
+      );
+
+      // Shallow copy: 변경된 테이블만 새 참조, 나머지는 원본 참조 유지
       return {
         ...prevSchedulesMap,
         [tableId]: updatedSchedules,
       };
     });
-  }, [setSchedulesMap]);
+  }, [tableId, setSchedulesMap]);
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd} modifiers={modifiers}>
