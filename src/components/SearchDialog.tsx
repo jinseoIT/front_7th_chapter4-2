@@ -53,11 +53,7 @@ const fetchMajors = () => axios.get<Lecture[]>(`${import.meta.env.BASE_URL}sched
 const fetchLiberalArts = () => axios.get<Lecture[]>(`${import.meta.env.BASE_URL}schedules-liberal-arts.json`);
 
 // TODO: 이 코드를 개선해서 API 호출을 최소화 해보세요 + Promise.all이 현재 잘못 사용되고 있습니다. 같이 개선해주세요.
-const fetchAllLectures = async () =>
-  await Promise.all([
-    (console.log("API Call 1", performance.now()), fetchMajors()),
-    (console.log("API Call 2", performance.now()), fetchLiberalArts()),
-  ]);
+const fetchAllLectures = async () => await Promise.all([fetchMajors(), fetchLiberalArts()]);
 
 // TODO: 이 컴포넌트에서 불필요한 연산이 발생하지 않도록 다양한 방식으로 시도해주세요.
 const SearchDialog = ({ isOpen, initialTableId, initialDay, initialTime, onClose }: Props) => {
@@ -188,37 +184,45 @@ const SearchDialog = ({ isOpen, initialTableId, initialDay, initialTime, onClose
   );
 
   useEffect(() => {
-    const start = performance.now();
-    console.log("API 호출 시작: ", start);
     fetchAllLectures().then((results) => {
-      const end = performance.now();
-      console.log("모든 API 호출 완료 ", end);
-      console.log("API 호출에 걸린 시간(ms): ", end - start);
       setLectures(results.flatMap((result) => result.data));
     });
   }, []);
 
   useEffect(() => {
-    const $loader = loaderRef.current;
-    const $loaderWrapper = loaderWrapperRef.current;
-
-    if (!$loader || !$loaderWrapper) {
+    if (!isOpen) {
       return;
     }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setPage((prevPage) => Math.min(lastPage, prevPage + 1));
-        }
-      },
-      { threshold: 0, root: $loaderWrapper }
-    );
+    let observer: IntersectionObserver | null = null;
 
-    observer.observe($loader);
+    const timeoutId = setTimeout(() => {
+      const $loader = loaderRef.current;
+      const $loaderWrapper = loaderWrapperRef.current;
 
-    return () => observer.unobserve($loader);
-  }, [lastPage]);
+      if (!$loader || !$loaderWrapper) {
+        return;
+      }
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            setPage((prevPage) => Math.min(lastPage, prevPage + 1));
+          }
+        },
+        { threshold: 0, root: $loaderWrapper }
+      );
+
+      observer.observe($loader);
+    }, 300);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (observer) {
+        observer.disconnect();
+      }
+    };
+  }, [lastPage, isOpen, filteredLectures.length]);
 
   useEffect(() => {
     if (isOpen) {

@@ -29,8 +29,6 @@ const ScheduleTableCard = memo(
     onDuplicate: (tableId: string) => void;
     onRemove: (tableId: string) => void;
   }) => {
-    console.log(`🟡 ScheduleTableCard ${tableId} 렌더링`);
-
     // 각 테이블별 콜백 메모이제이션
     const handleScheduleTimeClick = useCallback(
       (timeInfo: { day: string; time: number }) => {

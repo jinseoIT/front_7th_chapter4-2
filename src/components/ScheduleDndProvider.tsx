@@ -40,8 +40,6 @@ interface Props extends PropsWithChildren {
 
 // 핵심: 각 테이블마다 독립적인 DndProvider!
 export default function ScheduleDndProvider({ children, tableId }: Props) {
-  console.log(`🔵 ScheduleDndProvider ${tableId} 렌더링`);
-
   const setSchedulesMap = useSetSchedulesMap();
   const sensors = useSensors(
     useSensor(PointerSensor, {

@@ -172,8 +172,6 @@ const TIMES = [
 const LECTURE_COLORS = ["#fdd", "#ffd", "#dff", "#ddf", "#fdf", "#dfd"] as const;
 
 const ScheduleTable = ({ tableId, schedules, onScheduleTimeClick, onDeleteButtonClick }: Props) => {
-  console.log(`🟢 ScheduleTable ${tableId} 렌더링`);
-
   // 강의 ID를 정렬된 문자열로 메모이제이션 (내용 기반 비교)
   const lectureIdsKey = useMemo(() => {
     const uniqueIds = new Set(schedules.map(({ lecture }) => lecture.id));
